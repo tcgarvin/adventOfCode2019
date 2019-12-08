@@ -59,7 +59,7 @@ class IntCodeRuntime:
         elif self._status == IntCodeStatus.UNINITIALIZED:
             raise Exception("Cannot run uninitialized program")
         elif self._status == IntCodeStatus.IOBLOCK:
-            if len(input) > 0:
+            if len(self._input) > 0:
                 self._status = IntCodeStatus.RUNNABLE
             else:
                 return
@@ -93,7 +93,7 @@ class IntCodeRuntime:
             elif opcode == 3:
                 assert mode1 == 0
                 if len(self._input) == 0:
-                    self._status == IntCodeStatus.IOBLOCK
+                    self._status = IntCodeStatus.IOBLOCK
                     return
                 user_input = self._input.pop()
                 p[p[pc+1]] = user_input
