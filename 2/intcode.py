@@ -1,4 +1,12 @@
-import string
+from enum import Enum
+from collections import deque
+
+class IntCodeStatus(Enum):
+    RUNNABLE = 0
+    IOBLOCK = 1
+    HALTED = 2
+    UNINITIALIZED = 3
+
 def parse_instruction(instruction:int):
     digits = str(instruction).zfill(5)
     mode3 = int(digits[0])
@@ -13,108 +21,154 @@ def get_param(program, pc, param_number, mode):
         param = program[param]
     return param
 
-def run_program(program, debug=False):
-    p = program
-    halt = False
-    pc = 0
-    while halt == False:
-        instruction = p[pc]
-        opcode, mode1, mode2, mode3 = parse_instruction(instruction)
+class IntCodeRuntime:
+    def __init__(self):
+        self._program = [99]
+        self._status = IntCodeStatus.UNINITIALIZED
+        self._input = deque()
+        self._output_buffer = list()
+        self._program_counter = 0
 
-        # Addition
-        if opcode == 1:
-            param1 = get_param(p, pc, 1, mode1)
-            param2 = get_param(p, pc, 2, mode2)
-            assert mode3 == 0
-            if debug:
-                print(f"{p[pc:pc+4]}: p[{p[pc+3]}] = {param1} + {param2}")
-            p[p[pc+3]] = param1 + param2
-            pc += 4
+    def set_program(self, program):
+        assert self._program[0] == 99
+        self._program = program
+        self._program_counter = 0
+        self._status = IntCodeStatus.RUNNABLE
 
-        # Multiplication
-        elif opcode == 2:
-            param1 = get_param(p, pc, 1, mode1)
-            param2 = get_param(p, pc, 2, mode2)
-            assert mode3 == 0
-            if debug:
-                print(f"{p[pc:pc+4]}: p[{p[pc+3]}] = {param1} * {param2}")
-            p[p[pc+3]] = param1 * param2
-            pc += 4
+    def get_exit_code(self):
+        assert self._status == IntCodeStatus.HALTED
+        return self._program[0]
 
-        # Input
-        elif opcode == 3:
-            assert mode1 == 0
-            user_input = int(input("Please Input Number: "))
-            p[p[pc+1]] = user_input
-            if debug:
-                print(f"{p[pc:pc+2]}: p[{p[pc+1]}] = {user_input}")
-            pc += 2
+    def get_status(self):
+        return self._status
 
-        # Output
-        elif opcode == 4:
-            param1 = get_param(p, pc, 1, mode1)
-            if debug:
-                print(f"{p[pc:pc+2]}: {param1} (p[{pc + 1}])")
+    def get_output(self):
+        result = self._output_buffer[:]
+        self._output_buffer.clear()
+        return result
+
+    def input_number(self, number):
+        self._input.appendleft(number)
+
+    def run(self, debug=False):
+        p = self._program
+
+        # If not runnable, see if we can become runnable
+        if self._status == IntCodeStatus.HALTED:
+            return
+        elif self._status == IntCodeStatus.UNINITIALIZED:
+            raise Exception("Cannot run uninitialized program")
+        elif self._status == IntCodeStatus.IOBLOCK:
+            if len(input) > 0:
+                self._status = IntCodeStatus.RUNNABLE
             else:
-                print(f"{param1}")
-            pc += 2
+                return
+    
+        while self._status == IntCodeStatus.RUNNABLE:
+            pc = self._program_counter
+            instruction = p[pc]
+            opcode, mode1, mode2, mode3 = parse_instruction(instruction)
 
-        elif opcode == 5:
-            param1 = get_param(p, pc, 1, mode1)
-            param2 = get_param(p, pc, 2, mode2)
-            if param1 != 0:
+            # Addition
+            if opcode == 1:
+                param1 = get_param(p, pc, 1, mode1)
+                param2 = get_param(p, pc, 2, mode2)
+                assert mode3 == 0
                 if debug:
-                    print(f"{p[pc:pc+4]}: TODO")
-                pc = param2
+                    print(f"{p[pc:pc+4]}: p[{p[pc+3]}] = {param1} + {param2}")
+                p[p[pc+3]] = param1 + param2
+                pc += 4
+
+            # Multiplication
+            elif opcode == 2:
+                param1 = get_param(p, pc, 1, mode1)
+                param2 = get_param(p, pc, 2, mode2)
+                assert mode3 == 0
+                if debug:
+                    print(f"{p[pc:pc+4]}: p[{p[pc+3]}] = {param1} * {param2}")
+                p[p[pc+3]] = param1 * param2
+                pc += 4
+
+            # Input
+            elif opcode == 3:
+                assert mode1 == 0
+                if len(self._input) == 0:
+                    self._status == IntCodeStatus.IOBLOCK
+                    return
+                user_input = self._input.pop()
+                p[p[pc+1]] = user_input
+                if debug:
+                    print(f"{p[pc:pc+2]}: p[{p[pc+1]}] = {user_input}")
+                pc += 2
+
+            # Output
+            elif opcode == 4:
+                param1 = get_param(p, pc, 1, mode1)
+                if debug:
+                    print(f"{p[pc:pc+2]}: {param1} (p[{pc + 1}])")
+
+                self._output_buffer.append(param1)
+                pc += 2
+
+            elif opcode == 5:
+                param1 = get_param(p, pc, 1, mode1)
+                param2 = get_param(p, pc, 2, mode2)
+                if param1 != 0:
+                    if debug:
+                        print(f"{p[pc:pc+4]}: TODO")
+                    pc = param2
+                else:
+                    if debug:
+                        print(f"{p[pc:pc+4]}: TODO")
+                    pc += 3
+
+            elif opcode == 6:
+                param1 = get_param(p, pc, 1, mode1)
+                param2 = get_param(p, pc, 2, mode2)
+                if param1 == 0:
+                    if debug:
+                        print(f"{p[pc:pc+4]}: TODO")
+                    pc = param2
+                else:
+                    if debug:
+                        print(f"{p[pc:pc+4]}: TODO")
+                    pc += 3
+
+            elif opcode == 7:
+                param1 = get_param(p, pc, 1, mode1)
+                param2 = get_param(p, pc, 2, mode2)
+                assert mode3 == 0
+                if debug:
+                    print(f"{p[pc:pc+4]}: p[{p[pc+3]}] = {param1} < {param2}")
+                p[p[pc+3]] = int(param1 < param2)
+                pc += 4
+
+            elif opcode == 8:
+                param1 = get_param(p, pc, 1, mode1)
+                param2 = get_param(p, pc, 2, mode2)
+                assert mode3 == 0
+                if debug:
+                    print(f"{p[pc:pc+4]}: p[{p[pc+3]}] = {param1} == {param2}")
+                p[p[pc+3]] = int(param1 == param2)
+                pc += 4
+
+            # Halt
+            elif opcode == 99:
+                self._status = IntCodeStatus.HALTED
+
             else:
-                if debug:
-                    print(f"{p[pc:pc+4]}: TODO")
-                pc += 3
+                raise Exception(f"Something went wrong at {pc}, value {instruction}")
 
-        elif opcode == 6:
-            param1 = get_param(p, pc, 1, mode1)
-            param2 = get_param(p, pc, 2, mode2)
-            if param1 == 0:
-                if debug:
-                    print(f"{p[pc:pc+4]}: TODO")
-                pc = param2
-            else:
-                if debug:
-                    print(f"{p[pc:pc+4]}: TODO")
-                pc += 3
-
-        elif opcode == 7:
-            param1 = get_param(p, pc, 1, mode1)
-            param2 = get_param(p, pc, 2, mode2)
-            assert mode3 == 0
-            if debug:
-                print(f"{p[pc:pc+4]}: p[{p[pc+3]}] = {param1} < {param2}")
-            p[p[pc+3]] = int(param1 < param2)
-            pc += 4
-
-        elif opcode == 8:
-            param1 = get_param(p, pc, 1, mode1)
-            param2 = get_param(p, pc, 2, mode2)
-            assert mode3 == 0
-            if debug:
-                print(f"{p[pc:pc+4]}: p[{p[pc+3]}] = {param1} == {param2}")
-            p[p[pc+3]] = int(param1 == param2)
-            pc += 4
-
-        # Halt
-        elif opcode == 99:
-            halt = True
-
-        else:
-            raise Exception(f"Something went wrong at {pc}, value {instruction}")
-
-    return p[0]
+            self._program_counter = pc
 
 def solve_part_1(program):
     p = program[:]
     p[1] = 12
     p[2] = 2
-    return run_program(p)
+    runtime = IntCodeRuntime()
+    runtime.set_program(p)
+    runtime.run()
+    return runtime.get_exit_code()
 
 PART_2_EXPECTED_OUTPUT = 19690720
 def solve_part_2(puzzle_input):
@@ -124,7 +178,10 @@ def solve_part_2(puzzle_input):
             program = puzzle_input[:]
             program[1] = i
             program[2] = j
-            output = run_program(program)
+            runtime = IntCodeRuntime()
+            runtime.set_program(program)
+            runtime.run()
+            output = runtime.get_exit_code()
             if output == PART_2_EXPECTED_OUTPUT:
                 return 100 * i + j
 
