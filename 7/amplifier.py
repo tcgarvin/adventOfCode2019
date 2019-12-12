@@ -33,7 +33,7 @@ def solve_part_2(puzzle_input):
     highest_signal = 0
     best_configuration = None
     for configuration in amplifier_configurations:
-        print(configuration)
+        #print(configuration)
         signal = 0
         
         amp_runtimes = []

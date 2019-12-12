@@ -1,5 +1,7 @@
-from enum import Enum
 from collections import deque
+from enum import Enum
+
+from defaultlist import defaultlist  # I am a terrible person
 
 class IntCodeStatus(Enum):
     RUNNABLE = 0
@@ -15,23 +17,20 @@ def parse_instruction(instruction:int):
     opcode = int(digits[3:])
     return opcode, mode1, mode2, mode3
 
-def get_param(program, pc, param_number, mode):
-    param = program[pc + param_number]
-    if mode == 0:
-        param = program[param]
-    return param
-
 class IntCodeRuntime:
     def __init__(self):
-        self._program = [99]
+        self._program = defaultlist(lambda: 0)
+        self._program[0] = 99
         self._status = IntCodeStatus.UNINITIALIZED
         self._input = deque()
         self._output_buffer = list()
         self._program_counter = 0
+        self._relative_base_offset = 0
 
     def set_program(self, program):
         assert self._program[0] == 99
-        self._program = program
+        self._program = defaultlist(lambda: 0)
+        self._program.extend(program)
         self._program_counter = 0
         self._status = IntCodeStatus.RUNNABLE
 
@@ -46,6 +45,14 @@ class IntCodeRuntime:
         result = self._output_buffer[:]
         self._output_buffer.clear()
         return result
+
+    def get_param_address(self, param_number, mode):
+        address = self._program_counter + param_number
+        if mode == 0:
+            address = self._program[address]
+        elif mode == 2:
+            address = self._relative_base_offset + self._program[address]
+        return address
 
     def input_number(self, number):
         self._input.appendleft(number)
@@ -68,51 +75,55 @@ class IntCodeRuntime:
             pc = self._program_counter
             instruction = p[pc]
             opcode, mode1, mode2, mode3 = parse_instruction(instruction)
+            pa1 = self.get_param_address(1, mode1)
+            pa2 = self.get_param_address(2, mode2)
+            pa3 = self.get_param_address(3, mode3)
 
             # Addition
             if opcode == 1:
-                param1 = get_param(p, pc, 1, mode1)
-                param2 = get_param(p, pc, 2, mode2)
-                assert mode3 == 0
+                param1 = p[pa1]
+                param2 = p[pa2]
+                assert mode3 != 1
                 if debug:
-                    print(f"{p[pc:pc+4]}: p[{p[pc+3]}] = {param1} + {param2}")
-                p[p[pc+3]] = param1 + param2
+                    print(f"{p[pc:pc+4]}: p[{pa3}] = {param1} + {param2}")
+                p[pa3] = param1 + param2
                 pc += 4
 
             # Multiplication
             elif opcode == 2:
-                param1 = get_param(p, pc, 1, mode1)
-                param2 = get_param(p, pc, 2, mode2)
-                assert mode3 == 0
+                param1 = p[pa1]
+                param2 = p[pa2]
+                assert mode3 != 1
                 if debug:
-                    print(f"{p[pc:pc+4]}: p[{p[pc+3]}] = {param1} * {param2}")
-                p[p[pc+3]] = param1 * param2
+                    print(f"{p[pc:pc+4]}: p[{pa3}] = {param1} * {param2}")
+                p[pa3] = param1 * param2
                 pc += 4
 
             # Input
             elif opcode == 3:
-                assert mode1 == 0
+                assert mode1 != 1
                 if len(self._input) == 0:
                     self._status = IntCodeStatus.IOBLOCK
                     return
                 user_input = self._input.pop()
-                p[p[pc+1]] = user_input
+                p[pa1] = user_input
                 if debug:
-                    print(f"{p[pc:pc+2]}: p[{p[pc+1]}] = {user_input}")
+                    print(f"{p[pc:pc+2]}: p[{pa1}] = {user_input}")
                 pc += 2
 
             # Output
             elif opcode == 4:
-                param1 = get_param(p, pc, 1, mode1)
+                param1 = p[pa1]
                 if debug:
-                    print(f"{p[pc:pc+2]}: {param1} (p[{pc + 1}])")
+                    print(f"{p[pc:pc+2]}: {param1} (p[{pa1}])")
 
                 self._output_buffer.append(param1)
                 pc += 2
 
+            # Absolute Jump if Not Equal to Zero
             elif opcode == 5:
-                param1 = get_param(p, pc, 1, mode1)
-                param2 = get_param(p, pc, 2, mode2)
+                param1 = p[pa1]
+                param2 = p[pa2]
                 if param1 != 0:
                     if debug:
                         print(f"{p[pc:pc+4]}: TODO")
@@ -122,9 +133,10 @@ class IntCodeRuntime:
                         print(f"{p[pc:pc+4]}: TODO")
                     pc += 3
 
+            # Absolute Jump if Equal to Zero
             elif opcode == 6:
-                param1 = get_param(p, pc, 1, mode1)
-                param2 = get_param(p, pc, 2, mode2)
+                param1 = p[pa1]
+                param2 = p[pa2]
                 if param1 == 0:
                     if debug:
                         print(f"{p[pc:pc+4]}: TODO")
@@ -134,23 +146,33 @@ class IntCodeRuntime:
                         print(f"{p[pc:pc+4]}: TODO")
                     pc += 3
 
+            # Test Less Than
             elif opcode == 7:
-                param1 = get_param(p, pc, 1, mode1)
-                param2 = get_param(p, pc, 2, mode2)
-                assert mode3 == 0
+                param1 = p[pa1]
+                param2 = p[pa2]
+                assert mode3 != 1
                 if debug:
-                    print(f"{p[pc:pc+4]}: p[{p[pc+3]}] = {param1} < {param2}")
-                p[p[pc+3]] = int(param1 < param2)
+                    print(f"{p[pc:pc+4]}: p[{pa3}] = {param1} < {param2}")
+                p[pa3] = int(param1 < param2)
                 pc += 4
 
+            # Test Equality
             elif opcode == 8:
-                param1 = get_param(p, pc, 1, mode1)
-                param2 = get_param(p, pc, 2, mode2)
-                assert mode3 == 0
+                param1 = p[pa1]
+                param2 = p[pa2]
+                assert mode3 != 1
                 if debug:
-                    print(f"{p[pc:pc+4]}: p[{p[pc+3]}] = {param1} == {param2}")
-                p[p[pc+3]] = int(param1 == param2)
+                    print(f"{p[pc:pc+4]}: p[{pa3}] = {param1} == {param2}")
+                p[pa3] = int(param1 == param2)
                 pc += 4
+
+            # Update relative base offset
+            elif opcode == 9:
+                param1 = p[pa1]
+                if debug:
+                    print(f"{p[pc:pc+2]}: rel = {self._relative_base_offset} + {param1}")
+                self._relative_base_offset += param1
+                pc += 2
 
             # Halt
             elif opcode == 99:
