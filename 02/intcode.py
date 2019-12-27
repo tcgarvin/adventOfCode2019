@@ -46,6 +46,11 @@ class IntCodeRuntime:
         self._output_buffer.clear()
         return result
 
+    def get_ascii_output(self):
+        number_output = self.get_output()
+        result = "".join(chr(num) for num in number_output)
+        return result
+
     def get_param_address(self, param_number, mode):
         address = self._program_counter + param_number
         if mode == 0:
@@ -56,6 +61,10 @@ class IntCodeRuntime:
 
     def input_number(self, number):
         self._input.appendleft(number)
+
+    def input_ascii(self, ascii : str):
+        for char in ascii:
+            self.input_number(ord(char))
 
     def run(self, debug=False):
         p = self._program
